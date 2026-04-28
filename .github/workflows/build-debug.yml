@@ -1,25 +1,23 @@
-name: Build Debug APK
+name: Build Release APK
 
 on:
-  # যখনই আপনি কোড Push করবেন, তখন অটোমেটিক বিল্ড শুরু হবে
+  # কোড এডিট করলে অটোমেটিক বিল্ড হবে
   push:
     branches:
       - master
       - main
-  # চাইলে GitHub এর "Actions" ট্যাব থেকে ম্যানুয়ালিও রান করতে পারবেন
+  # চাইলে ম্যানুয়ালিও রান করা যাবে
   workflow_dispatch:
 
 jobs:
   build:
-    name: Build APK
+    name: Build Release
     runs-on: ubuntu-latest
 
     steps:
-      # ১. রিপোজিটরি থেকে কোড কপি করে আনবে
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # ২. Java 17 সেটআপ করবে (কারণ আপনার গ্রেডলে Java 17 দেওয়া আছে)
       - name: Setup Java JDK
         uses: actions/setup-java@v4
         with:
@@ -27,17 +25,24 @@ jobs:
           java-version: '17'
           cache: 'gradle'
 
-      # ৩. গ্রেডল (Gradle) কে রান করার পারমিশন দেবে
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      # ৪. Debug APK বিল্ড করবে
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug
+      # Release APK বিল্ড করা হচ্ছে (এটি কোডকে অপ্টিমাইজ এবং ফাস্ট করবে)
+      - name: Build Release APK
+        run: ./gradlew assembleRelease
 
-      # ৫. বিল্ড করা APK ফাইলটি আপলোড করে ডাউনলোডের জন্য প্রস্তুত করবে
-      - name: Upload Debug APK
+      # মোবাইলে ইন্সটল হওয়ার জন্য অটোমেটিক সাইন (Sign) করা হচ্ছে
+      - name: Generate Keystore & Sign APK
+        run: |
+          keytool -genkey -v -keystore temp.keystore -storepass android -alias androidkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "C=US, O=Android, CN=Android"
+          APK_PATH=$(find app/build/outputs/apk/release -name "*-unsigned.apk" | head -n 1)
+          BUILD_TOOLS_DIR=$(ls -d $ANDROID_HOME/build-tools/* | tail -1)
+          $BUILD_TOOLS_DIR/apksigner sign --ks temp.keystore --ks-pass pass:android --key-pass pass:android "$APK_PATH"
+
+      # সফলভাবে বিল্ড হওয়ার পর ফাইলটি ডাউনলোডের জন্য আপলোড করা হচ্ছে
+      - name: Upload Release APK
         uses: actions/upload-artifact@v4
         with:
-          name: Litube-Debug-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: Litube-Release-APK
+          path: app/build/outputs/apk/release/*.apk
