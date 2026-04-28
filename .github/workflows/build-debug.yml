@@ -1,0 +1,43 @@
+name: Build Debug APK
+
+on:
+  # যখনই আপনি কোড Push করবেন, তখন অটোমেটিক বিল্ড শুরু হবে
+  push:
+    branches:
+      - master
+      - main
+  # চাইলে GitHub এর "Actions" ট্যাব থেকে ম্যানুয়ালিও রান করতে পারবেন
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+
+    steps:
+      # ১. রিপোজিটরি থেকে কোড কপি করে আনবে
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # ২. Java 17 সেটআপ করবে (কারণ আপনার গ্রেডলে Java 17 দেওয়া আছে)
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+          cache: 'gradle'
+
+      # ৩. গ্রেডল (Gradle) কে রান করার পারমিশন দেবে
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      # ৪. Debug APK বিল্ড করবে
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug
+
+      # ৫. বিল্ড করা APK ফাইলটি আপলোড করে ডাউনলোডের জন্য প্রস্তুত করবে
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Litube-Debug-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
