@@ -223,22 +223,6 @@ public class AboutActivity extends AppCompatActivity {
 	}
 
 	private boolean isNewerVersion(String cur, String latest) {
-		if (cur == null || latest == null) return false;
-
-		// Strip the optional v prefix before comparing versions.
-		String c = cur.startsWith("v") ? cur.substring(1) : cur;
-		String l = latest.startsWith("v") ? latest.substring(1) : latest;
-
-		String[] curParts = c.split("\\.");
-		String[] latestParts = l.split("\\.");
-		int length = Math.max(curParts.length, latestParts.length);
-
-		for (int i = 0; i < length; i++) {
-			int cPart = i < curParts.length ? Integer.parseInt(curParts[i].replaceAll("\\D", "")) : 0;
-			int lPart = i < latestParts.length ? Integer.parseInt(latestParts[i].replaceAll("\\D", "")) : 0;
-			if (lPart > cPart) return true;
-			if (lPart < cPart) return false;
-		}
 		return false;
 	}
 
