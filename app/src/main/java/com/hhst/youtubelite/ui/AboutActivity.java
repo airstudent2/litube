@@ -120,57 +120,11 @@ public class AboutActivity extends AppCompatActivity {
 		updateLayout.setEnabled(false);
 		updateText.setText(R.string.checking_for_updates);
 
-		Request request = new Request.Builder()
-						.url("https://api.github.com/repos/HydeYYHH/litube/releases/latest")
-						.build();
-
-		client.newCall(request).enqueue(new Callback() {
-			@Override
-			public void onFailure(@NonNull Call call, @NonNull IOException e) {
-				runOnUiThread(() -> {
-					updateLayout.setEnabled(true);
-					updateText.setText(R.string.check_for_updates);
-					ToastUtils.show(AboutActivity.this, R.string.failed_to_check_for_updates);
-				});
-			}
-
-			@Override
-			public void onResponse(@NonNull Call call, @NonNull Response response) {
-				try (response) {
-					if (!response.isSuccessful())
-						throw new IOException("Unexpected code " + response);
-
-					String body = Objects.requireNonNull(response.body()).string();
-					JsonObject json = gson.fromJson(body, JsonObject.class);
-					String latest = json.get("tag_name").getAsString();
-					String url = json.get("html_url").getAsString();
-
-					String version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
-					if (isNewerVersion(version, latest)) {
-						runOnUiThread(() -> {
-							updateLayout.setEnabled(true);
-							updateText.setText(getString(R.string.update_available, latest));
-							updateLayout.setOnClickListener(v -> {
-								Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-								startActivity(intent);
-							});
-						});
-					} else {
-						runOnUiThread(() -> {
-							updateLayout.setEnabled(true);
-							updateText.setText(R.string.check_for_updates);
-							ToastUtils.show(AboutActivity.this, R.string.no_updates_available);
-						});
-					}
-				} catch (Exception e) {
-					Log.e(TAG, "Update check error", e);
-					runOnUiThread(() -> {
-						updateLayout.setEnabled(true);
-						updateText.setText(R.string.check_for_updates);
-						ToastUtils.show(AboutActivity.this, R.string.failed_to_check_for_updates);
-					});
-				}
-			}
+		// ইন্টারনেট চেক বন্ধ করে দেওয়া হলো, সরাসরি "নো আপডেট" দেখাবে
+		runOnUiThread(() -> {
+			updateLayout.setEnabled(true);
+			updateText.setText(R.string.check_for_updates);
+			ToastUtils.show(AboutActivity.this, R.string.no_updates_available);
 		});
 	}
 
@@ -223,6 +177,22 @@ public class AboutActivity extends AppCompatActivity {
 	}
 
 	private boolean isNewerVersion(String cur, String latest) {
+		if (cur == null || latest == null) return false;
+
+		// Strip the optional v prefix before comparing versions.
+		String c = cur.startsWith("v") ? cur.substring(1) : cur;
+		String l = latest.startsWith("v") ? latest.substring(1) : latest;
+
+		String[] curParts = c.split("\\.");
+		String[] latestParts = l.split("\\.");
+		int length = Math.max(curParts.length, latestParts.length);
+
+		for (int i = 0; i < length; i++) {
+			int cPart = i < curParts.length ? Integer.parseInt(curParts[i].replaceAll("\\D", "")) : 0;
+			int lPart = i < latestParts.length ? Integer.parseInt(latestParts[i].replaceAll("\\D", "")) : 0;
+			if (lPart > cPart) return true;
+			if (lPart < cPart) return false;
+		}
 		return false;
 	}
 
