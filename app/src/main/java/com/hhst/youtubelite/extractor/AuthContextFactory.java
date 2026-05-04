@@ -27,7 +27,7 @@ public final class AuthContextFactory {
 
 	@NonNull
 	public AuthContext create(@NonNull String url) {
-		// নতুন যুক্ত করা লাইন: লগ ইন করার সাথে সাথে কুকি রিফ্রেশ হবে যাতে Extractor নতুন সেশন পায়
+		// ইনস্ট্যান্ট কুকি সিঙ্ক করা হচ্ছে, যাতে লগ ইনের সাথে সাথে Extractor নতুন সেশন পায়
 		CookieManager.getInstance().flush();
 
 		PoTokenWebViewContext page = store.getSnapshot();
