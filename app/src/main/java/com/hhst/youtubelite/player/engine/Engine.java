@@ -160,6 +160,12 @@ public class Engine {
 			@Override
 			public void onPlaybackStateChanged(int state) {
 				if (state == Player.STATE_ENDED) {
+					// --- নতুন কোড: ভিডিও সম্পূর্ণ শেষ হলে সেভ করা পজিশন ডিলিট করে দেওয়া হবে ---
+					if (videoId != null) {
+						prefs.clearProgress(videoId);
+					}
+					// ------------------------------------------------------------------------
+
 					if (isShortVideo()) {
 						player.seekTo(0);
 						player.play();
@@ -869,15 +875,9 @@ public class Engine {
 		this.player.release();
 	}
 
-/**
- * Value object for app logic.
- */
 	private record TrackOverride(@NonNull TrackGroup group, int track) {
 	}
 
-/**
- * Snapshot of the active playback state.
- */
 	private record State(@NonNull VideoDetails video,
 	                     @NonNull StreamCatalog catalog,
 	                     @NonNull DeliveryCatalog deliveries,
