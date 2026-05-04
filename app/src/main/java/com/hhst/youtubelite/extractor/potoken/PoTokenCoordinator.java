@@ -205,7 +205,7 @@ public final class PoTokenCoordinator {
 			return null;
 		}
 
-		// নতুন আপডেট: 10L (মিনিট) এর জায়গায় 45L করে দিলাম, যাতে টোকেন অনেক আগেই এক্সপায়ার হয়ে যায় এবং নতুন টোকেন তৈরি হয়।
+		// টোকেনের মেয়াদ কমানো হলো, যাতে ব্লক খাওয়ার আগেই অ্যাপ নতুন টোকেন জেনারেট করে নেয় (৪৫ মিনিট কমানো হলো)
 		long expiresAtMs = System.currentTimeMillis()
 						+ Math.max(0L, TimeUnit.SECONDS.toMillis(generateItResult.expirationSeconds) - TimeUnit.MINUTES.toMillis(45L));
 		return new PoTokenSession(hostGeneration, expiresAtMs);
