@@ -30,6 +30,7 @@ import com.hhst.youtubelite.player.sponsor.SponsorBlockManager;
 import com.hhst.youtubelite.player.sponsor.SponsorOverlayView;
 import com.hhst.youtubelite.ui.ErrorDialog;
 import com.hhst.youtubelite.util.DeviceUtils;
+import com.hhst.youtubelite.util.ToastUtils;
 import com.tencent.mmkv.MMKV;
 
 import org.schabi.newpipe.extractor.exceptions.SignInConfirmNotBotException;
@@ -98,6 +99,9 @@ public class LitePlayer {
 	@Getter
 	private boolean inMiniPlayer;
 	private boolean wasInPip;
+
+	// অটো-রিট্রাই কাউন্টার
+	private int retryCount = 0;
 
 	@Inject
 	public LitePlayer(@NonNull Activity activity,
@@ -249,6 +253,7 @@ public class LitePlayer {
 											details.segments(),
 											details.subtitles());
 						}).thenAccept(er -> activity.runOnUiThread(() -> {
+							retryCount = 0; // ভিডিও সফল হলে কাউন্ট রিসেট
 							if (this.extractSession == session) this.extractSession = null;
 							if (!Objects.equals(this.queuedId, videoId)) return;
 							playerView.setTitle(er.video().getTitle());
@@ -281,6 +286,27 @@ public class LitePlayer {
 								Throwable error = cause;
 								activity.runOnUiThread(() -> {
 									if (!Objects.equals(this.queuedId, videoId)) return;
+
+									// --- শুধুমাত্র টোকেন ক্লিয়ার এবং অটো-রিট্রাই (No WebView) ---
+									if (error instanceof LoginRequiredExtractionException || error.getMessage().toLowerCase().contains("bot")) {
+										if (retryCount < 2) {
+											retryCount++;
+											// ব্লক হওয়া টোকেন ক্লিয়ার করা হচ্ছে
+											kv.removeValuesForKeys(new String[]{
+												"potoken.web.player", "potoken.web.visitor", "potoken.web.gvs",
+												"potoken.android.player", "potoken.android.visitor", "potoken.android.gvs",
+												"potoken.ios.player", "potoken.ios.visitor", "potoken.ios.gvs"
+											});
+											LitePlayer.this.queuedId = null;
+											ToastUtils.show(activity, "Refreshing connection...", 2000);
+											play(url); // নতুন টোকেন নিয়ে নেটিভ প্লেয়ারেই আবার ট্রাই করবে
+											return;
+										} else {
+											retryCount = 0; // ২ বার ফেইল করলে এরপর এরর ডায়ালগ দেখাবে
+										}
+									}
+									// ----------------------------------------------------
+
 									ErrorDialog.show(activity, error.getMessage(), error);
 								});
 							}
