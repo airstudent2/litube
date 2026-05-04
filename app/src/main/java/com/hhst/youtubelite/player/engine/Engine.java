@@ -243,21 +243,23 @@ public class Engine {
 		return null;
 	}
 
-	// --- নতুন আপডেট: WebView-কে পেজ লোড করতে না বলে শুধু URL টি রিটার্ন করবে ---
-	static String buildPlaylistNavigationScript(int playlistOffset) {
+	// --- নতুন আপডেট: WebView-এর URL এর ওপর নির্ভর না করে Native Player-এর ID পাস করা হচ্ছে ---
+	static String buildPlaylistNavigationScript(int playlistOffset, String currentVideoId) {
 		boolean nextNavigation = playlistOffset > 0;
 		return """
 						(function(){
 						const playlistContents=globalThis.ytInitialData?.contents?.singleColumnWatchNextResults?.playlist?.playlist?.contents;
 						if(!Array.isArray(playlistContents) || playlistContents.length===0) return 'missing-playlist';
-						const watchUrl=new URL(location.href);
-						const videoId=watchUrl.searchParams.get('v') ?? globalThis.ytInitialPlayerResponse?.videoDetails?.videoId;
+						
+						const videoId = '%s';
 						if(!videoId) return 'missing-current-video-id';
+						
 						const index=playlistContents.findIndex(item => item?.playlistPanelVideoRenderer?.videoId === videoId);
 						if(index < 0) return 'missing-current-video';
+						
 						let targetIndex;
 						if (__NEXT_NAVIGATION__) {
-							targetIndex = (index + 1) % playlistContents.length;
+							targetIndex = (index + 1) %% playlistContents.length;
 						} else {
 							if (index === 0) return 'playlist-head';
 							targetIndex = index - 1;
@@ -266,35 +268,37 @@ public class Engine {
 						const targetUrl=targetVideo?.navigationEndpoint?.commandMetadata?.webCommandMetadata?.url;
 						if(typeof targetUrl !== 'string' || targetUrl.length === 0) return 'missing-target-url';
 						
-						// এই লাইনটি পরিবর্তন করা হয়েছে: WebView নেভিগেট না করে সরাসরি URL রিটার্ন করবে
 						return new URL(targetUrl, location.origin).toString();
 						})();
-						""".replace("__NEXT_NAVIGATION__", Boolean.toString(nextNavigation));
+						""".replace("__NEXT_NAVIGATION__", Boolean.toString(nextNavigation))
+						   .formatted(currentVideoId != null ? currentVideoId : "");
 	}
 
-	static String buildRandomPlaylistNavigationScript() {
+	static String buildRandomPlaylistNavigationScript(String currentVideoId) {
 		return """
 						(function(){
 						const playlistContents=globalThis.ytInitialData?.contents?.singleColumnWatchNextResults?.playlist?.playlist?.contents;
 						if(!Array.isArray(playlistContents) || playlistContents.length===0) return 'missing-playlist';
-						const watchUrl=new URL(location.href);
-						const videoId=watchUrl.searchParams.get('v') ?? globalThis.ytInitialPlayerResponse?.videoDetails?.videoId;
+						
+						const videoId = '%s';
 						if(!videoId) return 'missing-current-video-id';
+						
 						const i=playlistContents.findIndex(item => item?.playlistPanelVideoRenderer?.videoId === videoId);
 						if(i < 0) return 'missing-current-video';
+						
 						const candidateIndices=playlistContents
 							.map((item,index)=>item?.playlistPanelVideoRenderer ? index : -1)
 							.filter(index=>index >= 0 && (playlistContents.length === 1 || index !== i));
 						if(candidateIndices.length === 0) return 'missing-random-target';
+						
 						const targetIndex=candidateIndices[Math.floor(Math.random() * candidateIndices.length)];
 						const targetVideo=playlistContents[targetIndex]?.playlistPanelVideoRenderer;
 						const targetUrl=targetVideo?.navigationEndpoint?.commandMetadata?.webCommandMetadata?.url;
 						if(typeof targetUrl !== 'string' || targetUrl.length === 0) return 'missing-target-url';
 						
-						// এই লাইনটি পরিবর্তন করা হয়েছে: WebView নেভিগেট না করে সরাসরি URL রিটার্ন করবে
 						return new URL(targetUrl, location.origin).toString();
 						})();
-						""";
+						""".formatted(currentVideoId != null ? currentVideoId : "");
 	}
 	// --------------------------------------------------------------------------
 
@@ -418,7 +422,6 @@ public class Engine {
 		return this.player.getCurrentPosition();
 	}
 
-	// --- নতুন আপডেট: নেক্সট স্কিপ করার লজিক আপডেট করা হলো ---
 	public void skipToNext() {
 		boolean queueEnabled = queueRepository.isEnabled();
 		boolean hasQueueItems = queueRepository.hasItems();
@@ -434,13 +437,14 @@ public class Engine {
 			return;
 		}
 		if (playlistContext) {
+			// বর্তমান প্লেয়ারের ID পাঠানো হচ্ছে
 			this.tabManager.evalWatchJs(
-							buildPlaylistNavigationScript(1),
+							buildPlaylistNavigationScript(1, this.videoId),
 							value -> {
 								if (value == null) return;
-								String url = value.replace("\"", ""); // JS কোটেশন সহ পাঠায়, তাই রিমুভ করা হলো
+								String url = value.replace("\"", "");
 								if (url.startsWith("http")) {
-									tabManager.playInWatch(url); // সরাসরি নেটিভ প্লেয়ারকে লিংক দেওয়া হলো
+									tabManager.playInWatch(url);
 								}
 							});
 		}
@@ -473,8 +477,8 @@ public class Engine {
 			return;
 		}
 		if (playlistContext) {
-			tabManager.evalWatchJs(
-							buildPlaylistNavigationScript(-1),
+			this.tabManager.evalWatchJs(
+							buildPlaylistNavigationScript(-1, this.videoId),
 							value -> {
 								if (value == null) return;
 								String url = value.replace("\"", "");
@@ -511,7 +515,7 @@ public class Engine {
 		}
 		if (playlistContext) {
 			this.tabManager.evalWatchJs(
-							buildRandomPlaylistNavigationScript(), 
+							buildRandomPlaylistNavigationScript(this.videoId), 
 							value -> {
 								if (value == null) return;
 								String url = value.replace("\"", "");
@@ -521,7 +525,6 @@ public class Engine {
 							});
 		}
 	}
-	// --------------------------------------------------------
 
 	@NonNull
 	public QueueNav getQueueNavigationAvailability() {
