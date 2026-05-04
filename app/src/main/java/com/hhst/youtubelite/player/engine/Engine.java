@@ -94,13 +94,11 @@ public class Engine {
 			if (!player.isPlaying()) return;
 			long pos = player.getCurrentPosition();
 			long duration = player.getDuration();
-			// Persist playback progress.
 			if (videoId != null && duration > 0 && prefs.getExtensionManager().isEnabled(Constant.REMEMBER_LAST_POSITION)) {
 				if (pos > SAFE_ZONE_MS && pos < duration - SAFE_ZONE_MS) {
 					prefs.persistProgress(videoId, pos, duration, TimeUnit.MILLISECONDS);
 				}
 			}
-			// Skip sponsor segments.
 			List<long[]> segments = sponsor.getSegments();
 			for (final long[] segment : segments) {
 				if (pos >= segment[0] && pos < segment[1]) {
@@ -160,12 +158,9 @@ public class Engine {
 			@Override
 			public void onPlaybackStateChanged(int state) {
 				if (state == Player.STATE_ENDED) {
-					// --- নতুন কোড: ভিডিও সম্পূর্ণ শেষ হলে সেভ করা পজিশন ডিলিট করে দেওয়া হবে ---
 					if (videoId != null) {
 						prefs.clearProgress(videoId);
 					}
-					// ------------------------------------------------------------------------
-
 					if (isShortVideo()) {
 						player.seekTo(0);
 						player.play();
@@ -235,10 +230,6 @@ public class Engine {
 		return (DefaultTrackSelector) Objects.requireNonNull(player.getTrackSelector());
 	}
 
-	static boolean didNavigate(@Nullable String value) {
-		return "\"navigating\"".equals(value);
-	}
-
 	@Nullable
 	private static StreamCandidate findAudioCandidate(@NonNull StreamCatalog catalog,
 	                                                  @NonNull AudioStream stream) {
@@ -252,6 +243,7 @@ public class Engine {
 		return null;
 	}
 
+	// --- নতুন আপডেট: WebView-কে পেজ লোড করতে না বলে শুধু URL টি রিটার্ন করবে ---
 	static String buildPlaylistNavigationScript(int playlistOffset) {
 		boolean nextNavigation = playlistOffset > 0;
 		return """
@@ -273,8 +265,9 @@ public class Engine {
 						const targetVideo=playlistContents[targetIndex]?.playlistPanelVideoRenderer;
 						const targetUrl=targetVideo?.navigationEndpoint?.commandMetadata?.webCommandMetadata?.url;
 						if(typeof targetUrl !== 'string' || targetUrl.length === 0) return 'missing-target-url';
-						location.href = new URL(targetUrl, location.origin).toString();
-						return 'navigating';
+						
+						// এই লাইনটি পরিবর্তন করা হয়েছে: WebView নেভিগেট না করে সরাসরি URL রিটার্ন করবে
+						return new URL(targetUrl, location.origin).toString();
 						})();
 						""".replace("__NEXT_NAVIGATION__", Boolean.toString(nextNavigation));
 	}
@@ -297,11 +290,13 @@ public class Engine {
 						const targetVideo=playlistContents[targetIndex]?.playlistPanelVideoRenderer;
 						const targetUrl=targetVideo?.navigationEndpoint?.commandMetadata?.webCommandMetadata?.url;
 						if(typeof targetUrl !== 'string' || targetUrl.length === 0) return 'missing-target-url';
-						location.href = new URL(targetUrl, location.origin).toString();
-						return 'navigating';
+						
+						// এই লাইনটি পরিবর্তন করা হয়েছে: WebView নেভিগেট না করে সরাসরি URL রিটার্ন করবে
+						return new URL(targetUrl, location.origin).toString();
 						})();
 						""";
 	}
+	// --------------------------------------------------------------------------
 
 	private boolean isShortVideo() {
 		long duration = player.getDuration();
@@ -342,7 +337,6 @@ public class Engine {
 		this.player.setMediaSource(PlaybackSourceFactory.create(sources, details, plan));
 		this.player.setPlaybackParameters(new PlaybackParameters(this.prefs.getSpeed()));
 
-		// Resume position
 		if (prefs.getExtensionManager().isEnabled(Constant.REMEMBER_LAST_POSITION)) {
 			long resumePos = prefs.getResumePosition(videoId);
 			if (resumePos > SAFE_ZONE_MS && resumePos < duration - SAFE_ZONE_MS) {
@@ -424,6 +418,7 @@ public class Engine {
 		return this.player.getCurrentPosition();
 	}
 
+	// --- নতুন আপডেট: নেক্সট স্কিপ করার লজিক আপডেট করা হলো ---
 	public void skipToNext() {
 		boolean queueEnabled = queueRepository.isEnabled();
 		boolean hasQueueItems = queueRepository.hasItems();
@@ -441,7 +436,13 @@ public class Engine {
 		if (playlistContext) {
 			this.tabManager.evalWatchJs(
 							buildPlaylistNavigationScript(1),
-							null);
+							value -> {
+								if (value == null) return;
+								String url = value.replace("\"", ""); // JS কোটেশন সহ পাঠায়, তাই রিমুভ করা হলো
+								if (url.startsWith("http")) {
+									tabManager.playInWatch(url); // সরাসরি নেটিভ প্লেয়ারকে লিংক দেওয়া হলো
+								}
+							});
 		}
 	}
 
@@ -475,14 +476,15 @@ public class Engine {
 			tabManager.evalWatchJs(
 							buildPlaylistNavigationScript(-1),
 							value -> {
-								if (didNavigate(value)) return;
-								if ("\"playlist-head\"".equals(value)) {
+								if (value == null) return;
+								String url = value.replace("\"", "");
+								if ("playlist-head".equals(url)) {
 									if (canGoBack) tabManager.goBackInWatch();
 									return;
 								}
-								if ("\"missing-playlist\"".equals(value)
-												|| "\"missing-current-video-id\"".equals(value)
-												|| "\"missing-current-video\"".equals(value)) {
+								if (url.startsWith("http")) {
+									tabManager.playInWatch(url);
+								} else if (url.startsWith("missing")) {
 									if (canGoBack) tabManager.goBackInWatch();
 								}
 							});
@@ -508,9 +510,18 @@ public class Engine {
 			return;
 		}
 		if (playlistContext) {
-			this.tabManager.evalWatchJs(buildRandomPlaylistNavigationScript(), null);
+			this.tabManager.evalWatchJs(
+							buildRandomPlaylistNavigationScript(), 
+							value -> {
+								if (value == null) return;
+								String url = value.replace("\"", "");
+								if (url.startsWith("http")) {
+									tabManager.playInWatch(url);
+								}
+							});
 		}
 	}
+	// --------------------------------------------------------
 
 	@NonNull
 	public QueueNav getQueueNavigationAvailability() {
@@ -553,7 +564,6 @@ public class Engine {
 				}
 			}
 		} catch (IllegalArgumentException ignored) {
-			// Fall back to the cached engine id.
 		}
 		return videoId;
 	}
@@ -588,7 +598,6 @@ public class Engine {
 				if (!resolutions.contains(res)) resolutions.add(res);
 			}
 		}
-		// If empty, fall back to the active tracks, such as DASH or HLS.
 		if (resolutions.isEmpty()) {
 			for (final Tracks.Group group : this.player.getCurrentTracks().getGroups()) {
 				if (group.getType() == C.TRACK_TYPE_VIDEO) {
@@ -785,7 +794,6 @@ public class Engine {
 	public List<StreamSegment> getSegments() {
 		if (!segments.isEmpty()) return segments;
 
-		// Create default segment with video title at 0 seconds
 		List<StreamSegment> segments = new ArrayList<>();
 		VideoDetails video = videoDetails;
 		if (video != null) segments.add(new StreamSegment(video.getTitle() != null ? video.getTitle() : "", 0));
