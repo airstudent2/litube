@@ -164,6 +164,14 @@ public final class PlayerPreferences {
 		mmkv.encode(key, json);
 	}
 
+	// --- নতুন মেথড: ভিডিও শেষ হয়ে গেলে সেভ করা পজিশন ডিলিট করার জন্য ---
+	public void clearProgress(@Nullable String videoId) {
+		if (videoId == null) return;
+		String key = PREFIX_PROGRESS + videoId;
+		mmkv.removeValueForKey(key);
+	}
+	// ------------------------------------------------------------------
+
 	@NonNull
 	public MiniPlayerLayoutState getMiniPlayerLayoutState() {
 		return new MiniPlayerLayoutState(
@@ -189,9 +197,6 @@ public final class PlayerPreferences {
 		return categories;
 	}
 
-/**
- * Component that handles app logic.
- */
 	@Data
 	@AllArgsConstructor
 	@NoArgsConstructor
@@ -201,9 +206,6 @@ public final class PlayerPreferences {
 		private long timestamp;
 	}
 
-/**
- * Value object for app logic.
- */
 	public record MiniPlayerLayoutState(int widthDp, float translationX, float translationY) {
 	}
 }
