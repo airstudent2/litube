@@ -58,7 +58,10 @@ public final class Constant {
 					Map.entry(SKIP_SPONSORS, true),
 					Map.entry(SKIP_SELF_PROMO, true),
 					Map.entry(SKIP_POI_HIGHLIGHT, true),
-					Map.entry(REMEMBER_LAST_POSITION, true),
+					
+					// এখানে true থেকে false করে দেওয়া হয়েছে, ফলে ডিফল্টভাবে আর আগের পজিশন মনে রাখবে না
+					Map.entry(REMEMBER_LAST_POSITION, false), 
+					
 					Map.entry(REMEMBER_QUALITY, true),
 					Map.entry(ENABLE_BACKGROUND_PLAY, true),
 					Map.entry(ENABLE_PIP, true),
