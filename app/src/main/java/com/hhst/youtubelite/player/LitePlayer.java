@@ -9,10 +9,12 @@ import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.Tracks;
 import androidx.media3.common.util.UnstableApi;
+import androidx.media3.datasource.HttpDataSource;
 import androidx.media3.ui.DefaultTimeBar;
 
 import com.hhst.youtubelite.PlaybackService;
 import com.hhst.youtubelite.R;
+import com.hhst.youtubelite.browser.TabManager;
 import com.hhst.youtubelite.extractor.ExtractionSession;
 import com.hhst.youtubelite.extractor.PlaybackDetails;
 import com.hhst.youtubelite.extractor.PlaybackPlanner;
@@ -79,6 +81,8 @@ public class LitePlayer {
 	private final PlayerStateStore stateStore;
 	@NonNull
 	private final Executor executor;
+	@NonNull
+	private final TabManager tabManager;
 	private final MMKV kv = MMKV.defaultMMKV();
 	@Nullable
 	private PlaybackService playbackSvc;
@@ -113,7 +117,8 @@ public class LitePlayer {
 	                  @NonNull QueueRepository queueRepo,
 	                  @NonNull PlayerPreferences prefs,
 	                  @NonNull PlayerStateStore stateStore,
-	                  @NonNull Executor executor) {
+	                  @NonNull Executor executor,
+	                  @NonNull TabManager tabManager) {
 		this.activity = activity;
 		this.extractor = extractor;
 		this.playerView = playerView;
@@ -124,6 +129,7 @@ public class LitePlayer {
 		this.prefs = prefs;
 		this.stateStore = stateStore;
 		this.executor = executor;
+		this.tabManager = tabManager;
 		playerView.setup();
 		queueRepo.addListener(queueListener);
 		setupEngineListeners();
@@ -170,6 +176,40 @@ public class LitePlayer {
 
 			@Override
 			public void onPlayerError(@NonNull PlaybackException error) {
+				// --- 403 Forbidden (Playback Bot Protection) বাইপাস লজিক ---
+				Throwable cause = error.getCause();
+				boolean is403 = false;
+				
+				Throwable current = cause;
+				while (current != null) {
+					if (current instanceof HttpDataSource.InvalidResponseCodeException) {
+						if (((HttpDataSource.InvalidResponseCodeException) current).responseCode == 403) {
+							is403 = true;
+							break;
+						}
+					}
+					current = current.getCause();
+				}
+
+				if (is403 && activeId != null) {
+					if (retryCount < 2) {
+						retryCount++;
+						kv.removeValuesForKeys(new String[]{
+							"potoken.web.player", "potoken.web.visitor", "potoken.web.gvs",
+							"potoken.android.player", "potoken.android.visitor", "potoken.android.gvs",
+							"potoken.ios.player", "potoken.ios.visitor", "potoken.ios.gvs"
+						});
+						String urlToRetry = "https://www.youtube.com/watch?v=" + activeId;
+						LitePlayer.this.queuedId = null;
+						ToastUtils.show(activity, "Bypassing YouTube restriction...", 2000);
+						play(urlToRetry);
+						return; // এরর ডায়ালগ দেখাবে না
+					} else {
+						retryCount = 0; // ২ বার ফেইল করলে রিসেট করে এরর দেখাবে
+					}
+				}
+				// -----------------------------------------------------------
+
 				ErrorDialog.show(activity, error.getMessage(), error);
 			}
 		});
@@ -287,11 +327,10 @@ public class LitePlayer {
 								activity.runOnUiThread(() -> {
 									if (!Objects.equals(this.queuedId, videoId)) return;
 
-									// --- শুধুমাত্র টোকেন ক্লিয়ার এবং অটো-রিট্রাই (No WebView) ---
+									// --- এক্সট্রাকশন Bot Protection বাইপাস লজিক ---
 									if (error instanceof LoginRequiredExtractionException || error.getMessage().toLowerCase().contains("bot")) {
 										if (retryCount < 2) {
 											retryCount++;
-											// ব্লক হওয়া টোকেন ক্লিয়ার করা হচ্ছে
 											kv.removeValuesForKeys(new String[]{
 												"potoken.web.player", "potoken.web.visitor", "potoken.web.gvs",
 												"potoken.android.player", "potoken.android.visitor", "potoken.android.gvs",
@@ -299,10 +338,10 @@ public class LitePlayer {
 											});
 											LitePlayer.this.queuedId = null;
 											ToastUtils.show(activity, "Refreshing connection...", 2000);
-											play(url); // নতুন টোকেন নিয়ে নেটিভ প্লেয়ারেই আবার ট্রাই করবে
-											return;
+											play(url); 
+											return; 
 										} else {
-											retryCount = 0; // ২ বার ফেইল করলে এরপর এরর ডায়ালগ দেখাবে
+											retryCount = 0; 
 										}
 									}
 									// ----------------------------------------------------
